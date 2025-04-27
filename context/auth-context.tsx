@@ -83,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (name: string, email: string, password: string) => {
     try {
+      // First, create the user in Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -95,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
 
       if (error) {
+        console.error("Auth signup error:", error)
         return {
           success: false,
           message: error.message,
@@ -102,22 +104,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Create a profile record
+      // If user creation was successful, use the API route to create the profile
       if (data.user) {
-        const { error: profileError } = await supabase.from("profiles").insert([
-          {
-            id: data.user.id,
-            name,
-            email,
-            role: "client", // Default role
-          },
-        ])
+        try {
+          const response = await fetch("/api/create-user", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name,
+              email,
+              id: data.user.id,
+              role: "client",
+            }),
+          })
 
-        if (profileError) {
+          const result = await response.json()
+
+          if (!response.ok) {
+            console.error("API profile creation error:", result.error)
+            return {
+              success: false,
+              message: "Account created but profile setup failed. Please contact support.",
+              error: result.error,
+            }
+          }
+
+          return {
+            success: true,
+            message: "Please check your email to verify your account.",
+          }
+        } catch (apiError) {
+          console.error("API call error:", apiError)
           return {
             success: false,
             message: "Account created but profile setup failed. Please contact support.",
-            error: profileError,
+            error: apiError,
           }
         }
       }
@@ -127,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         message: "Please check your email to verify your account.",
       }
     } catch (error: any) {
+      console.error("Signup error:", error)
       return {
         success: false,
         message: error.message || "An unexpected error occurred",

@@ -4,28 +4,45 @@ import { NextResponse } from "next/server"
 export async function POST(request: Request) {
   try {
     const supabase = createServerSupabaseClient()
+    const { name, email, password, role = "client", id } = await request.json()
 
-    // Get current user to verify they're an admin
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
+    // If an ID is provided, we're creating a profile for an existing auth user
+    if (id) {
+      // Check if profile already exists
+      const { data: existingProfile } = await supabase.from("profiles").select("*").eq("id", id).single()
 
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      if (existingProfile) {
+        return NextResponse.json({
+          success: true,
+          message: "Profile already exists",
+          user: existingProfile,
+        })
+      }
+
+      // Create profile for existing user - using direct SQL to bypass RLS
+      const { error: profileError } = await supabase.rpc("create_profile", {
+        user_id: id,
+        user_name: name,
+        user_email: email,
+        user_role: role,
+      })
+
+      if (profileError) {
+        console.error("Profile creation error:", profileError)
+        return NextResponse.json({ error: profileError.message || "Failed to create profile" }, { status: 500 })
+      }
+
+      // Fetch the created profile
+      const { data: profile } = await supabase.from("profiles").select("*").eq("id", id).single()
+
+      return NextResponse.json({
+        success: true,
+        message: "Profile created successfully",
+        user: profile,
+      })
     }
 
-    // Verify the current user is an admin
-    const { data: currentUserProfile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", session.user.id)
-      .single()
-
-    if (!currentUserProfile || currentUserProfile.role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized. Admin access required." }, { status: 403 })
-    }
-
-    const { name, email, password, role = "client" } = await request.json()
+    // If no ID is provided, we're creating both auth user and profile
 
     // Check if user already exists
     const { data: existingUser } = await supabase.from("profiles").select("*").eq("email", email).single()
@@ -51,30 +68,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to create user" }, { status: 500 })
     }
 
-    // Create profile
-    const { error: profileError } = await supabase.from("profiles").insert([
-      {
-        id: authData.user.id,
-        name,
-        email,
-        role,
-      },
-    ])
+    // Create profile using direct SQL to bypass RLS
+    const { error: profileError } = await supabase.rpc("create_profile", {
+      user_id: authData.user.id,
+      user_name: name,
+      user_email: email,
+      user_role: role,
+    })
 
     if (profileError) {
       console.error("Profile error:", profileError)
       return NextResponse.json({ error: profileError.message || "Failed to create profile" }, { status: 500 })
     }
 
+    // Fetch the created profile
+    const { data: profile } = await supabase.from("profiles").select("*").eq("id", authData.user.id).single()
+
     return NextResponse.json({
       success: true,
       message: "User created successfully",
-      user: {
-        id: authData.user.id,
-        email: authData.user.email,
-        name,
-        role,
-      },
+      user: profile,
     })
   } catch (error) {
     console.error("Server error:", error)

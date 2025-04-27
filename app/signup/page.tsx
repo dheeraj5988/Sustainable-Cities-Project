@@ -4,127 +4,152 @@ import type React from "react"
 
 import { useState } from "react"
 import Link from "next/link"
-import { useAuth } from "@/context/auth-context" // Fixed import path
+import { useAuth } from "@/context/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { LoadingSpinner } from "@/components/loading-spinner"
 
-export default function Signup() {
+export default function SignupPage() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isSuccess, setIsSuccess] = useState(false)
   const { signUp } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
     setError(null)
+    setSuccess(null)
+
+    // Validate form
+    if (!name || !email || !password || !confirmPassword) {
+      setError("All fields are required")
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters")
+      return
+    }
+
+    setIsLoading(true)
 
     try {
       const { success, message, error } = await signUp(name, email, password)
 
-      if (success) {
-        setIsSuccess(true)
+      if (error) {
+        console.error("Signup error:", error)
+        setError(message || "An error occurred during signup")
       } else {
-        setError(message || error?.message || "Failed to create account")
+        setSuccess(message || "Account created successfully! Please check your email to verify your account.")
+        // Clear form
+        setName("")
+        setEmail("")
+        setPassword("")
+        setConfirmPassword("")
       }
     } catch (err: any) {
-      setError(err.message || "An error occurred during signup")
+      console.error("Signup error:", err)
+      setError(err.message || "An unexpected error occurred")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md space-y-8 rounded-lg bg-white p-6 shadow-md">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">Sustainable Cities</h1>
-          <h2 className="mt-6 text-2xl font-bold">Create your account</h2>
-        </div>
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {isSuccess ? (
-          <div className="space-y-6">
-            <Alert>
-              <AlertDescription>
-                Your account has been created! Please check your email to verify your account.
-              </AlertDescription>
+    <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl">Sign Up</CardTitle>
+          <CardDescription>Create a new account to get started</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{error}</AlertDescription>
             </Alert>
-            <Button asChild className="w-full">
+          )}
+          {success && (
+            <Alert className="mb-4 bg-green-50 text-green-800">
+              <AlertDescription>{success}</AlertDescription>
+            </Alert>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={isLoading || !!success}
+                placeholder="Enter your name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading || !!success}
+                placeholder="Enter your email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={isLoading || !!success}
+                placeholder="Create a password"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={isLoading || !!success}
+                placeholder="Confirm your password"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoading || !!success}>
+              {isLoading ? <LoadingSpinner /> : "Sign Up"}
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex flex-col space-y-4">
+          {success ? (
+            <Button asChild variant="outline" className="w-full">
               <Link href="/login">Go to Login</Link>
             </Button>
-          </div>
-        ) : (
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-4 rounded-md">
-              <div>
-                <Label htmlFor="name">Full Name</Label>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email address</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
+          ) : (
+            <div className="text-center text-sm">
+              Already have an account?{" "}
+              <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+                Log in
+              </Link>
             </div>
-
-            <div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <LoadingSpinner /> : "Sign up"}
-              </Button>
-            </div>
-          </form>
-        )}
-
-        <div className="mt-4 text-center text-sm">
-          <p>
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-primary hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </div>
-      </div>
+          )}
+        </CardFooter>
+      </Card>
     </div>
   )
 }

@@ -208,6 +208,15 @@ export interface Database {
         }
         Returns: undefined
       }
+      create_profile: {
+        Args: {
+          user_id: string
+          user_name: string
+          user_email: string
+          user_role: string
+        }
+        Returns: undefined
+      }
     }
   }
 }
