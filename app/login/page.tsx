@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useAuth } from "@/contexts/auth-context"
+import { useAuth } from "@/context/auth-context" // Changed from contexts to context
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -28,23 +28,16 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      // const { error } = await signIn(email, password)
+      const { data, error } = await signIn(email, password)
 
-      // if (error) {
-      //   setError(error.message)
-      // } else {
-      //   router.push("/")
-      // }
-      const { success, message } = await signIn(email, password)
-
-      if (success) {
+      if (error) {
+        setError(error.message)
+      } else {
         toast({
           title: "Login successful",
           description: "Welcome back!",
         })
         router.push("/dashboard")
-      } else {
-        setError(message || "Invalid email or password")
       }
     } catch (err: any) {
       setError(err.message || "An error occurred during login")

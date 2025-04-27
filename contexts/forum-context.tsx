@@ -4,28 +4,37 @@ import type React from "react"
 
 import { createContext, useContext } from "react"
 import { supabase } from "@/lib/supabase/client"
-import { useAuth } from "./auth-context"
-import type { Database } from "@/types/supabase"
+import { useAuth } from "@/context/auth-context"
 
-type ForumThread = Database["public"]["Tables"]["forum_threads"]["Row"]
-type ForumThreadInsert = Database["public"]["Tables"]["forum_threads"]["Insert"]
-type ForumThreadUpdate = Database["public"]["Tables"]["forum_threads"]["Update"]
+// Define types for forum threads and comments
+export type ForumThread = {
+  id: string
+  title: string
+  body: string
+  tags: string[]
+  status: string
+  created_by: string
+  created_at: string
+  updated_at: string
+  comment_count: number
+}
 
-type ForumComment = Database["public"]["Tables"]["forum_comments"]["Row"]
-type ForumCommentInsert = Database["public"]["Tables"]["forum_comments"]["Insert"]
+export type ForumComment = {
+  id: string
+  thread_id: string
+  body: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
 
 type ForumContextType = {
-  createThread: (
-    thread: Omit<ForumThreadInsert, "created_by">,
-  ) => Promise<{ data: ForumThread | null; error: any | null }>
-  updateThread: (id: string, updates: ForumThreadUpdate) => Promise<{ data: ForumThread | null; error: any | null }>
-  deleteThread: (id: string) => Promise<{ error: any | null }>
-  createComment: (
-    comment: Omit<ForumCommentInsert, "created_by">,
-  ) => Promise<{ data: ForumComment | null; error: any | null }>
-  deleteComment: (id: string) => Promise<{ error: any | null }>
-  approveThread: (id: string) => Promise<{ data: ForumThread | null; error: any | null }>
-  rejectThread: (id: string) => Promise<{ data: ForumThread | null; error: any | null }>
+  createThread: (thread: Partial<ForumThread>) => Promise<{ data: any; error: any }>
+  updateThread: (id: string, thread: Partial<ForumThread>) => Promise<{ data: any; error: any }>
+  deleteThread: (id: string) => Promise<{ data: any; error: any }>
+  createComment: (comment: Partial<ForumComment>) => Promise<{ data: any; error: any }>
+  updateComment: (id: string, comment: Partial<ForumComment>) => Promise<{ data: any; error: any }>
+  deleteComment: (id: string) => Promise<{ data: any; error: any }>
 }
 
 const ForumContext = createContext<ForumContextType | undefined>(undefined)
@@ -33,9 +42,10 @@ const ForumContext = createContext<ForumContextType | undefined>(undefined)
 export function ForumProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
 
-  const createThread = async (thread: Omit<ForumThreadInsert, "created_by">) => {
+  // Create a new forum thread
+  const createThread = async (thread: Partial<ForumThread>) => {
     if (!user) {
-      return { data: null, error: new Error("User not authenticated") }
+      return { data: null, error: { message: "You must be logged in to create a thread" } }
     }
 
     const { data, error } = await supabase
@@ -43,6 +53,7 @@ export function ForumProvider({ children }: { children: React.ReactNode }) {
       .insert({
         ...thread,
         created_by: user.id,
+        comment_count: 0,
       })
       .select()
       .single()
@@ -50,59 +61,78 @@ export function ForumProvider({ children }: { children: React.ReactNode }) {
     return { data, error }
   }
 
-  const updateThread = async (id: string, updates: ForumThreadUpdate) => {
-    const { data, error } = await supabase.from("forum_threads").update(updates).eq("id", id).select().single()
+  // Update a forum thread
+  const updateThread = async (id: string, thread: Partial<ForumThread>) => {
+    if (!user) {
+      return { data: null, error: { message: "You must be logged in to update a thread" } }
+    }
+
+    const { data, error } = await supabase
+      .from("forum_threads")
+      .update(thread)
+      .eq("id", id)
+      .eq("created_by", user.id) // Ensure user owns the thread
+      .select()
+      .single()
 
     return { data, error }
   }
 
+  // Delete a forum thread
   const deleteThread = async (id: string) => {
-    const { error } = await supabase.from("forum_threads").delete().eq("id", id)
+    if (!user) {
+      return { data: null, error: { message: "You must be logged in to delete a thread" } }
+    }
 
-    return { error }
+    const { data, error } = await supabase.from("forum_threads").delete().eq("id", id).eq("created_by", user.id) // Ensure user owns the thread
+
+    return { data, error }
   }
 
-  const createComment = async (comment: Omit<ForumCommentInsert, "created_by">) => {
+  // Create a new comment
+  const createComment = async (comment: Partial<ForumComment>) => {
     if (!user) {
-      return { data: null, error: new Error("User not authenticated") }
+      return { data: null, error: { message: "You must be logged in to comment" } }
+    }
+
+    // Start a transaction to add comment and update thread count
+    const { data, error } = await supabase.rpc("add_comment", {
+      p_thread_id: comment.thread_id,
+      p_body: comment.body,
+      p_user_id: user.id,
+    })
+
+    return { data, error }
+  }
+
+  // Update a comment
+  const updateComment = async (id: string, comment: Partial<ForumComment>) => {
+    if (!user) {
+      return { data: null, error: { message: "You must be logged in to update a comment" } }
     }
 
     const { data, error } = await supabase
       .from("forum_comments")
-      .insert({
-        ...comment,
-        created_by: user.id,
-      })
+      .update(comment)
+      .eq("id", id)
+      .eq("created_by", user.id) // Ensure user owns the comment
       .select()
       .single()
 
     return { data, error }
   }
 
+  // Delete a comment
   const deleteComment = async (id: string) => {
-    const { error } = await supabase.from("forum_comments").delete().eq("id", id)
+    if (!user) {
+      return { data: null, error: { message: "You must be logged in to delete a comment" } }
+    }
 
-    return { error }
-  }
-
-  const approveThread = async (id: string) => {
-    const { data, error } = await supabase
-      .from("forum_threads")
-      .update({ status: "Approved" })
-      .eq("id", id)
-      .select()
-      .single()
-
-    return { data, error }
-  }
-
-  const rejectThread = async (id: string) => {
-    const { data, error } = await supabase
-      .from("forum_threads")
-      .update({ status: "Rejected" })
-      .eq("id", id)
-      .select()
-      .single()
+    // Start a transaction to delete comment and update thread count
+    const { data, error } = await supabase.rpc("delete_comment", {
+      p_comment_id: id,
+      p_user_id: user.id,
+    })
 
     return { data, error }
   }
@@ -114,9 +144,8 @@ export function ForumProvider({ children }: { children: React.ReactNode }) {
         updateThread,
         deleteThread,
         createComment,
+        updateComment,
         deleteComment,
-        approveThread,
-        rejectThread,
       }}
     >
       {children}

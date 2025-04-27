@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { supabase } from "@/lib/supabase/client"
-import { useAuth } from "./auth-context"
+import { useAuth } from "@/context/auth-context"
 import { toast } from "@/components/ui/use-toast"
 
 // Define forum thread type
@@ -43,7 +43,8 @@ export function ForumProvider({ children }: { children: ReactNode }) {
   const [threads, setThreads] = useState<ForumThread[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { user } = useAuth()
+  const auth = useAuth()
+  const user = auth?.user
 
   // Fetch threads on mount
   useEffect(() => {

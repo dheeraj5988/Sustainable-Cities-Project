@@ -1,36 +1,36 @@
 import type React from "react"
-import "./globals.css"
+import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import { AuthProvider } from "@/context/auth-context"
-import { ReportsProvider } from "@/context/reports-context"
-import { ForumProvider } from "@/context/forum-context"
+import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
+import AppLayout from "@/components/layout/app-layout"
+import { AuthProvider } from "@/context/auth-context"
+import { ForumProvider } from "@/context/forum-context"
+import { ReportsProvider } from "@/context/reports-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata = {
-  title: "Sustainable Cities App",
-  description: "A platform for citizens to report issues and discuss sustainability initiatives",
+export const metadata: Metadata = {
+  title: "Sustainable Cities & Communities",
+  description: "Building sustainable cities and communities together",
     generator: 'v0.dev'
 }
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode
-}) {
+}>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <AuthProvider>
             <ReportsProvider>
               <ForumProvider>
-                <div className="flex flex-col min-h-screen">
-                  {children}
-                  <Toaster />
-                </div>
+                <AppLayout>{children}</AppLayout>
+                <Toaster />
               </ForumProvider>
             </ReportsProvider>
           </AuthProvider>

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { supabase } from "@/lib/supabase/client"
-import { useAuth } from "./auth-context"
+import { useAuth } from "@/context/auth-context"
 import { toast } from "@/components/ui/use-toast"
 
 // Define report type
@@ -66,7 +66,8 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   const [reports, setReports] = useState<Report[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { user } = useAuth()
+  const auth = useAuth()
+  const user = auth?.user
 
   // Fetch reports on mount
   useEffect(() => {
