@@ -1,9 +1,8 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
-import { useAuth } from "@/context/auth-context" // Fixed import path from contexts to context
+import { useAuth } from "@/context/auth-context"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -20,7 +19,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const { signUp: signup } = useAuth()
+  const { signUp } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
 
@@ -36,7 +35,7 @@ export default function SignupPage() {
     }
 
     try {
-      const { success, message } = await signup(name, email, password)
+      const { success, message } = await signUp(name, email, password)
 
       if (success) {
         toast({

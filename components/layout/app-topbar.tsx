@@ -16,7 +16,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAuth } from "@/context/auth-context"
 
 export function AppTopbar() {
-  const { user, logout } = useAuth()
+  const { user, signOut } = useAuth()
 
   // Get user initials for avatar
   const getInitials = (name: string) => {
@@ -31,7 +31,7 @@ export function AppTopbar() {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6">
       <SidebarTrigger />
-      <div className="hidden md:block text-lg font-semibold">Sustainable Cities & Communities</div>
+      <div className="hidden md:block text-lg font-semibold">Sustainable Cities App</div>
       <div className="ml-auto flex items-center gap-4">
         <form className="relative hidden md:flex">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -62,7 +62,7 @@ export function AppTopbar() {
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={logout} className="text-red-600">
+            <DropdownMenuItem onClick={() => signOut()} className="text-red-600">
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
             </DropdownMenuItem>

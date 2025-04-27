@@ -2,8 +2,8 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { toast } from "@/components/ui/use-toast"
 import { supabase } from "@/lib/supabase/client"
+import { toast } from "@/components/ui/use-toast"
 
 // Define user types
 export interface User {
@@ -16,9 +16,9 @@ export interface User {
 // Define authentication context type
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>
-  signup: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>
-  logout: () => void
+  signIn: (email: string, password: string) => Promise<{ success: boolean; message?: string; data?: any; error?: any }>
+  signUp: (name: string, email: string, password: string) => Promise<{ success: boolean; message?: string }>
+  signOut: () => Promise<void>
   isLoading: boolean
 }
 
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser({
               id: session.user.id,
               name: userProfile.name || session.user.email?.split("@")[0] || "User",
-              email: userProfile.email || "",
+              email: userProfile.email || session.user.email || "",
               role: userProfile.role || "citizen",
             })
           }
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser({
             id: session.user.id,
             name: userProfile.name || session.user.email?.split("@")[0] || "User",
-            email: userProfile.email || "",
+            email: userProfile.email || session.user.email || "",
             role: userProfile.role || "citizen",
           })
         }
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Login function
-  const login = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -97,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return {
           success: false,
           message: error.message || "Login failed. Please check your credentials.",
+          error,
         }
       }
 
@@ -112,24 +113,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
         }
 
-        return { success: true }
+        return { success: true, data }
       }
 
       return {
         success: false,
         message: "Login failed. Please try again.",
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error)
       return {
         success: false,
         message: "An unexpected error occurred during login.",
+        error,
       }
     }
   }
 
   // Signup function
-  const signup = async (name: string, email: string, password: string) => {
+  const signUp = async (name: string, email: string, password: string) => {
     try {
       // First check if user already exists
       const { data: existingUser } = await supabase.from("profiles").select("*").eq("email", email).single()
@@ -183,7 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         success: false,
         message: "Registration failed. Please try again.",
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Signup error:", error)
       return {
         success: false,
@@ -193,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   // Logout function
-  const logout = async () => {
+  const signOut = async () => {
     try {
       await supabase.auth.signOut()
       setUser(null)
@@ -210,7 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  return <AuthContext.Provider value={{ user, login, signup, logout, isLoading }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, signIn, signUp, signOut, isLoading }}>{children}</AuthContext.Provider>
 }
 
 // Custom hook to use auth context
