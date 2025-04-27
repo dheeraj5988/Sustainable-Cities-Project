@@ -1,0 +1,148 @@
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+export interface Database {
+  public: {
+    Tables: {
+      profiles: {
+        Row: {
+          id: string
+          created_at: string
+          updated_at: string
+          name: string
+          email: string
+          role: string
+        }
+        Insert: {
+          id: string
+          created_at?: string
+          updated_at?: string
+          name?: string
+          email?: string
+          role?: string
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          updated_at?: string
+          name?: string
+          email?: string
+          role?: string
+        }
+      }
+      reports: {
+        Row: {
+          id: string
+          title: string
+          description: string
+          location: string
+          latitude?: number
+          longitude?: number
+          type: string
+          status: string
+          created_by: string
+          assigned_to?: string
+          created_at: string
+          updated_at: string
+          resolution_images?: string[]
+          comment?: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          description: string
+          location: string
+          latitude?: number
+          longitude?: number
+          type: string
+          status?: string
+          created_by: string
+          assigned_to?: string
+          created_at?: string
+          updated_at?: string
+          resolution_images?: string[]
+          comment?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string
+          location?: string
+          latitude?: number
+          longitude?: number
+          type?: string
+          status?: string
+          created_by?: string
+          assigned_to?: string
+          created_at?: string
+          updated_at?: string
+          resolution_images?: string[]
+          comment?: string
+        }
+      }
+      forum_threads: {
+        Row: {
+          id: string
+          title: string
+          body: string
+          created_by: string
+          tags: string[]
+          status: string
+          comment_count: number
+          created_at: string
+          updated_at: string
+          comment?: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          body: string
+          created_by: string
+          tags?: string[]
+          status?: string
+          comment_count?: number
+          created_at?: string
+          updated_at?: string
+          comment?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          body?: string
+          created_by?: string
+          tags?: string[]
+          status?: string
+          comment_count?: number
+          created_at?: string
+          updated_at?: string
+          comment?: string
+        }
+      }
+      forum_comments: {
+        Row: {
+          id: string
+          thread_id: string
+          content: string
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          thread_id: string
+          content: string
+          created_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          thread_id?: string
+          content?: string
+          created_by?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+    }
+  }
+}
