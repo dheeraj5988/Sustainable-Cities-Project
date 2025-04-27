@@ -79,7 +79,7 @@ The Sustainable Cities App is designed to empower citizens, city workers, and ad
 
 1. Clone the repository:
    \`\`\`bash
-   git clone https://github.com/yourusername/sustainable-cities-app.git
+   git clone https://github.com/dheeraj5988/sustainable-cities-app.git
    cd sustainable-cities-app
    \`\`\`
 
