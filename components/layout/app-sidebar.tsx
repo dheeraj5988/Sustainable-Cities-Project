@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { BarChart3, BookOpen, FileText, Home, MapPin, MessageSquare, Shield, Users, Wrench } from "lucide-react"
+import { BarChart3, BookOpen, FileText, Home, MapPin, MessageSquare, Shield, Ticket, Users, Wrench } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -69,6 +69,16 @@ export function AppSidebar() {
       title: "Forum Moderation",
       icon: MessageSquare,
       href: "/admin/forum",
+    },
+    {
+      title: "User Management",
+      icon: Users,
+      href: "/admin/users",
+    },
+    {
+      title: "Worker Invites",
+      icon: Ticket,
+      href: "/admin/invites",
     },
     {
       title: "Map View",

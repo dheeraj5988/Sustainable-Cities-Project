@@ -95,6 +95,9 @@ importers:
       '@supabase/auth-helpers-nextjs':
         specifier: latest
         version: 0.10.0(@supabase/supabase-js@2.49.4)
+      '@supabase/auth-js':
+        specifier: latest
+        version: 2.69.1
       '@supabase/ssr':
         specifier: latest
         version: 0.6.1(@supabase/supabase-js@2.49.4)
@@ -114,7 +117,7 @@ importers:
         specifier: 1.0.4
         version: 1.0.4(@types/react-dom@19.0.0)(@types/react@19.0.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       date-fns:
-        specifier: 4.1.0
+        specifier: latest
         version: 4.1.0
       embla-carousel-react:
         specifier: 8.5.1

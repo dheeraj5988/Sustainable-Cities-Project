@@ -47,6 +47,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
         setProfile(profile)
+
+        if (profile?.role === "admin") {
+          router.push("/admin")
+        } else if (profile?.role === "worker") {
+          router.push("/worker")
+        } else {
+          router.push("/dashboard")
+        }
       }
 
       setLoading(false)
@@ -61,6 +69,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (currentUser) {
         const { data: profile } = await supabase.from("profiles").select("*").eq("id", currentUser.id).single()
         setProfile(profile)
+
+        if (profile?.role === "admin") {
+          router.push("/admin")
+        } else if (profile?.role === "worker") {
+          router.push("/worker")
+        } else {
+          router.push("/dashboard")
+        }
       } else {
         setProfile(null)
       }
@@ -112,6 +128,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
         return { error }
+      }
+
+      // After successful sign in
+      if (data.user) {
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single()
+
+        if (profile?.role === "admin") {
+          router.push("/admin")
+        } else if (profile?.role === "worker") {
+          router.push("/worker")
+        } else {
+          router.push("/dashboard")
+        }
       }
 
       return { error: null }
