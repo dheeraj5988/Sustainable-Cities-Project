@@ -18,8 +18,10 @@ import { useAuth } from "@/context/auth-context"
 export function AppTopbar() {
   const { user, signOut } = useAuth()
 
-  // Get user initials for avatar
-  const getInitials = (name: string) => {
+  // Update the getInitials function to handle undefined or null names
+  const getInitials = (name?: string | null) => {
+    if (!name) return "U"
+
     return name
       .split(" ")
       .map((part) => part.charAt(0))
@@ -45,7 +47,7 @@ export function AppTopbar() {
             <Button variant="ghost" size="icon" className="rounded-full" aria-label="User menu">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-green-100 text-green-800">
-                  {user ? getInitials(user.name) : "U"}
+                  {user && user.name ? getInitials(user.name) : "U"}
                 </AvatarFallback>
               </Avatar>
             </Button>

@@ -2,41 +2,64 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/context/auth-context"
-import { useReports } from "@/context/reports-context"
+import { supabase } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FileText, MapPin, Plus } from "lucide-react"
 import Link from "next/link"
-import { ReportViewDialog } from "@/components/reports/report-view-dialog"
 import { LoadingSpinner } from "@/components/loading-spinner"
-import { ErrorAlert } from "@/components/error-alert"
-import type { Report } from "@/lib/api/report-service"
+
+interface Report {
+  id: string
+  title: string
+  description: string
+  location: string
+  status: string
+  created_at: string
+  type: string
+}
 
 export default function DashboardPage() {
   const { user } = useAuth()
-  const { reports, isLoading, error, fetchReports } = useReports()
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
-  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+  const [reports, setReports] = useState<Report[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchReports()
-  }, [fetchReports])
+    const fetchReports = async () => {
+      if (!user) return
 
-  // Get reports based on user role
-  const userReports = user?.role === "citizen" ? reports.filter((report) => report.created_by.id === user.id) : reports
+      try {
+        setIsLoading(true)
+        const { data, error } = await supabase
+          .from("reports")
+          .select("*")
+          .eq("created_by", user.id)
+          .order("created_at", { ascending: false })
+
+        if (error) {
+          console.error("Error fetching reports:", error)
+          setError("Failed to load reports")
+        } else {
+          setReports(data || [])
+        }
+      } catch (err) {
+        console.error("Error:", err)
+        setError("An unexpected error occurred")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchReports()
+  }, [user])
 
   // Filter reports by status
-  const pendingReports = userReports.filter((report) => report.status === "pending")
-  const inProgressReports = userReports.filter((report) => report.status === "in_progress")
-  const resolvedReports = userReports.filter((report) => report.status === "resolved")
-
-  // Handle report click to view details
-  const handleReportClick = (report: Report) => {
-    setSelectedReport(report)
-    setIsViewDialogOpen(true)
-  }
+  const pendingReports = reports.filter((report) => report.status === "Pending")
+  const inProgressReports = reports.filter((report) => report.status === "In Progress")
+  const resolvedReports = reports.filter((report) => report.status === "Resolved" || report.status === "Completed")
 
   if (isLoading) {
     return (
@@ -46,21 +69,11 @@ export default function DashboardPage() {
     )
   }
 
-  if (error) {
-    return <ErrorAlert message={error} />
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">
-          {user?.role === "admin" ? "Admin Dashboard" : "My Dashboard"}
-        </h1>
-        <p className="text-muted-foreground">
-          {user?.role === "admin"
-            ? "Manage and moderate sustainability reports"
-            : "Track your contributions to sustainable communities"}
-        </p>
+        <h1 className="text-3xl font-bold tracking-tight">My Dashboard</h1>
+        <p className="text-muted-foreground">Track your contributions to sustainable communities</p>
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -69,7 +82,11 @@ export default function DashboardPage() {
             Welcome, <span className="text-green-700">{user?.name}</span>
           </h2>
           <p className="text-muted-foreground">
-            {user?.role === "admin" ? "You have admin privileges" : "Thank you for your contributions"}
+            {user?.role === "admin"
+              ? "You have admin privileges"
+              : user?.role === "worker"
+                ? "You have worker privileges"
+                : "Thank you for your contributions"}
           </p>
         </div>
         {user?.role === "citizen" && (
@@ -84,14 +101,14 @@ export default function DashboardPage() {
 
       <Tabs defaultValue="all" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="all">All Reports ({userReports.length})</TabsTrigger>
+          <TabsTrigger value="all">All Reports ({reports.length})</TabsTrigger>
           <TabsTrigger value="pending">Pending ({pendingReports.length})</TabsTrigger>
           <TabsTrigger value="in_progress">In Progress ({inProgressReports.length})</TabsTrigger>
           <TabsTrigger value="resolved">Resolved ({resolvedReports.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="space-y-4">
-          {userReports.length === 0 ? (
+          {reports.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-10">
                 <FileText className="h-10 w-10 text-muted-foreground mb-4" />
@@ -105,8 +122,8 @@ export default function DashboardPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {userReports.map((report) => (
-                <ReportCard key={report.id} report={report} onClick={() => handleReportClick(report)} />
+              {reports.map((report) => (
+                <ReportCard key={report.id} report={report} />
               ))}
             </div>
           )}
@@ -122,7 +139,7 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {pendingReports.map((report) => (
-                <ReportCard key={report.id} report={report} onClick={() => handleReportClick(report)} />
+                <ReportCard key={report.id} report={report} />
               ))}
             </div>
           )}
@@ -138,7 +155,7 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {inProgressReports.map((report) => (
-                <ReportCard key={report.id} report={report} onClick={() => handleReportClick(report)} />
+                <ReportCard key={report.id} report={report} />
               ))}
             </div>
           )}
@@ -154,28 +171,25 @@ export default function DashboardPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {resolvedReports.map((report) => (
-                <ReportCard key={report.id} report={report} onClick={() => handleReportClick(report)} />
+                <ReportCard key={report.id} report={report} />
               ))}
             </div>
           )}
         </TabsContent>
       </Tabs>
-
-      {selectedReport && (
-        <ReportViewDialog report={selectedReport} open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen} />
-      )}
     </div>
   )
 }
 
-function ReportCard({ report, onClick }: { report: Report; onClick: () => void }) {
+function ReportCard({ report }: { report: Report }) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "resolved":
+      case "Resolved":
+      case "Completed":
         return "bg-green-500 hover:bg-green-600"
-      case "pending":
+      case "Pending":
         return "bg-yellow-500 hover:bg-yellow-600"
-      case "in_progress":
+      case "In Progress":
         return "bg-blue-500 hover:bg-blue-600"
       default:
         return "bg-gray-500 hover:bg-gray-600"
@@ -183,7 +197,7 @@ function ReportCard({ report, onClick }: { report: Report; onClick: () => void }
   }
 
   return (
-    <Card className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow" onClick={onClick}>
+    <Card className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow">
       <CardHeader className="pb-2">
         <div className="flex justify-between items-start">
           <CardTitle className="text-lg">{report.title}</CardTitle>
@@ -199,7 +213,7 @@ function ReportCard({ report, onClick }: { report: Report; onClick: () => void }
           <MapPin className="h-4 w-4 mr-1" />
           <span>{report.location}</span>
         </div>
-        <div className="text-sm text-muted-foreground">Reported by: {report.created_by.name}</div>
+        <div className="text-sm text-muted-foreground">Type: {report.type}</div>
       </CardContent>
     </Card>
   )
