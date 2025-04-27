@@ -5,71 +5,64 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import type { User } from "@supabase/supabase-js"
+import type { User } from "@supabase/auth-js"
 import type { Database } from "@/lib/database.types"
 
 type AuthContextType = {
   user: User | null
-  profile: any | null
+  userDetails: any | null
+  isLoading: boolean
   signUp: (
-    email: string,
-    password: string,
     name: string,
-  ) => Promise<{
-    error: any
-  }>
-  signIn: (
     email: string,
     password: string,
-  ) => Promise<{
-    error: any
-  }>
+  ) => Promise<{ success: boolean; message?: string; error?: any }>
+  signIn: (email: string, password: string) => Promise<any>
   signOut: () => Promise<void>
-  loading: boolean
+  resetPassword: (email: string) => Promise<{ success: boolean; message?: string; error?: any }>
+  updatePassword: (password: string) => Promise<{ success: boolean; message?: string; error?: any }>
+  resendConfirmationEmail: (email: string) => Promise<any>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<any | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [userDetails, setUserDetails] = useState<any | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const supabase = createClientComponentClient<Database>()
 
   useEffect(() => {
     const getUser = async () => {
       const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      setUser(user)
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (session?.user) {
+        setUser(session.user)
 
-      if (user) {
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-        setProfile(profile)
+        // Fetch user profile details including role
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single()
 
-        if (profile?.role === "admin") {
-          router.push("/admin")
-        } else if (profile?.role === "worker") {
-          router.push("/worker")
-        } else {
-          router.push("/dashboard")
-        }
+        setUserDetails(profile)
       }
-
-      setLoading(false)
+      setIsLoading(false)
     }
 
     getUser()
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const currentUser = session?.user ?? null
-      setUser(currentUser)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setUser(session.user)
 
-      if (currentUser) {
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", currentUser.id).single()
-        setProfile(profile)
+        // Fetch user profile details including role
+        const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).single()
 
+        setUserDetails(profile)
+
+        // Redirect based on user role
         if (profile?.role === "admin") {
           router.push("/admin")
         } else if (profile?.role === "worker") {
@@ -78,92 +71,189 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           router.push("/dashboard")
         }
       } else {
-        setProfile(null)
+        setUser(null)
+        setUserDetails(null)
       }
-
-      setLoading(false)
     })
 
     return () => {
-      authListener.subscription.unsubscribe()
+      subscription.unsubscribe()
     }
   }, [supabase, router])
 
-  const signUp = async (email: string, password: string, name: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          name,
-        },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    })
-
-    return { error }
-  }
-
-  const signIn = async (email: string, password: string) => {
+  const signUp = async (name: string, email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            name,
+          },
+        },
       })
 
       if (error) {
-        // Check if the error is due to email not being confirmed
-        if (error.message.includes("Email not confirmed")) {
-          // Send a new confirmation email
-          await supabase.auth.resend({
-            type: "signup",
-            email,
-          })
+        return {
+          success: false,
+          message: error.message,
+          error,
+        }
+      }
 
+      // Create a profile record
+      if (data.user) {
+        const { error: profileError } = await supabase.from("profiles").insert([
+          {
+            id: data.user.id,
+            name,
+            email,
+            role: "client", // Default role
+          },
+        ])
+
+        if (profileError) {
           return {
-            error: {
-              message: "Email not confirmed. We've sent a new confirmation email. Please check your inbox.",
-              emailNotConfirmed: true,
-            },
+            success: false,
+            message: "Account created but profile setup failed. Please contact support.",
+            error: profileError,
           }
         }
-        return { error }
       }
 
-      // After successful sign in
-      if (data.user) {
-        const { data: profile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single()
-
-        if (profile?.role === "admin") {
-          router.push("/admin")
-        } else if (profile?.role === "worker") {
-          router.push("/worker")
-        } else {
-          router.push("/dashboard")
-        }
+      return {
+        success: true,
+        message: "Please check your email to verify your account.",
       }
-
-      return { error: null }
     } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred",
+        error,
+      }
+    }
+  }
+
+  const signIn = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
       return { error }
     }
+
+    // Fetch user profile details including role
+    if (data.user) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", data.user.id)
+        .single()
+
+      if (profileError) {
+        return { error: profileError }
+      }
+
+      setUserDetails(profile)
+
+      // Redirect based on user role
+      if (profile?.role === "admin") {
+        router.push("/admin")
+      } else if (profile?.role === "worker") {
+        router.push("/worker")
+      } else {
+        router.push("/dashboard")
+      }
+    }
+
+    return { data }
   }
 
   const signOut = async () => {
     await supabase.auth.signOut()
-    router.push("/login")
+    router.push("/")
   }
 
-  const value = {
-    user,
-    profile,
-    signUp,
-    signIn,
-    signOut,
-    loading,
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message,
+          error,
+        }
+      }
+
+      return {
+        success: true,
+        message: "Password reset instructions sent to your email.",
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred",
+        error,
+      }
+    }
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  const updatePassword = async (password: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message,
+          error,
+        }
+      }
+
+      return {
+        success: true,
+        message: "Password updated successfully.",
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred",
+        error,
+      }
+    }
+  }
+
+  const resendConfirmationEmail = async (email: string) => {
+    const { data, error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+    })
+    return { data, error }
+  }
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        userDetails,
+        isLoading,
+        signUp,
+        signIn,
+        signOut,
+        resetPassword,
+        updatePassword,
+        resendConfirmationEmail,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuth() {

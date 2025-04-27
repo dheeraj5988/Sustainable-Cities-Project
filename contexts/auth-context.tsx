@@ -12,9 +12,15 @@ type AuthContextType = {
   user: User | null
   userDetails: any | null
   isLoading: boolean
-  signUp: (email: string, password: string, name: string) => Promise<any>
+  signUp: (
+    name: string,
+    email: string,
+    password: string,
+  ) => Promise<{ success: boolean; message?: string; error?: any }>
   signIn: (email: string, password: string) => Promise<any>
   signOut: () => Promise<void>
+  resetPassword: (email: string) => Promise<{ success: boolean; message?: string; error?: any }>
+  updatePassword: (password: string) => Promise<{ success: boolean; message?: string; error?: any }>
   resendConfirmationEmail: (email: string) => Promise<any>
 }
 
@@ -75,39 +81,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [supabase, router])
 
-  const signUp = async (email: string, password: string, name: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: {
-          name,
+  const signUp = async (name: string, email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            name,
+          },
         },
-      },
-    })
+      })
 
-    if (error) {
-      return { error }
-    }
+      if (error) {
+        return {
+          success: false,
+          message: error.message,
+          error,
+        }
+      }
 
-    // Create a profile record
-    if (data.user) {
-      const { error: profileError } = await supabase.from("profiles").insert([
-        {
-          id: data.user.id,
-          name,
-          email,
-          role: "client", // Default role
-        },
-      ])
+      // Create a profile record
+      if (data.user) {
+        const { error: profileError } = await supabase.from("profiles").insert([
+          {
+            id: data.user.id,
+            name,
+            email,
+            role: "client", // Default role
+          },
+        ])
 
-      if (profileError) {
-        return { error: profileError }
+        if (profileError) {
+          return {
+            success: false,
+            message: "Account created but profile setup failed. Please contact support.",
+            error: profileError,
+          }
+        }
+      }
+
+      return {
+        success: true,
+        message: "Please check your email to verify your account.",
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred",
+        error,
       }
     }
-
-    return { data }
   }
 
   const signIn = async (email: string, password: string) => {
@@ -152,6 +177,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/")
   }
 
+  const resetPassword = async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message,
+          error,
+        }
+      }
+
+      return {
+        success: true,
+        message: "Password reset instructions sent to your email.",
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred",
+        error,
+      }
+    }
+  }
+
+  const updatePassword = async (password: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message,
+          error,
+        }
+      }
+
+      return {
+        success: true,
+        message: "Password updated successfully.",
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        message: error.message || "An unexpected error occurred",
+        error,
+      }
+    }
+  }
+
   const resendConfirmationEmail = async (email: string) => {
     const { data, error } = await supabase.auth.resend({
       type: "signup",
@@ -169,6 +246,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signIn,
         signOut,
+        resetPassword,
+        updatePassword,
         resendConfirmationEmail,
       }}
     >

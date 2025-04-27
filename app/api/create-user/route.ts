@@ -4,7 +4,28 @@ import { NextResponse } from "next/server"
 export async function POST(request: Request) {
   try {
     const supabase = createServerSupabaseClient()
-    const { name, email, password, role = "citizen" } = await request.json()
+
+    // Get current user to verify they're an admin
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Verify the current user is an admin
+    const { data: currentUserProfile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", session.user.id)
+      .single()
+
+    if (!currentUserProfile || currentUserProfile.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized. Admin access required." }, { status: 403 })
+    }
+
+    const { name, email, password, role = "client" } = await request.json()
 
     // Check if user already exists
     const { data: existingUser } = await supabase.from("profiles").select("*").eq("email", email).single()

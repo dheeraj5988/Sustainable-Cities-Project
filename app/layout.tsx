@@ -5,7 +5,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import AppLayout from "@/components/layout/app-layout"
-import { AuthProvider } from "@/context/auth-context"
+import { AuthProvider } from "@/context/auth-context" // Make sure this path is correct
 import { ForumProvider } from "@/context/forum-context"
 import { ReportsProvider } from "@/context/reports-context"
 
