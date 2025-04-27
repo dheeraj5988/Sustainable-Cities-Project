@@ -58,7 +58,7 @@ export function AppSidebar() {
     {
       title: "Admin Dashboard",
       icon: Shield,
-      href: "/dashboard",
+      href: "/admin/dashboard",
     },
     {
       title: "Reports Management",

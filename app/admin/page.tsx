@@ -24,6 +24,9 @@ export default async function AdminDashboard() {
     } else {
       redirect("/dashboard")
     }
+  } else {
+    // Redirect admin to the new dashboard
+    redirect("/admin/dashboard")
   }
 
   return (

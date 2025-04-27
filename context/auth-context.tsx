@@ -104,30 +104,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // If user creation was successful, use the API route to create the profile
+      // If user creation was successful, create the profile using our new function
       if (data.user) {
         try {
-          const response = await fetch("/api/create-user", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              name,
-              email,
-              id: data.user.id,
-              role: "client",
-            }),
+          // Use the RPC function we created
+          const { error: profileError } = await supabase.rpc("create_profile_safely", {
+            user_id: data.user.id,
+            user_name: name,
+            user_email: email,
+            user_role: "client",
           })
 
-          const result = await response.json()
-
-          if (!response.ok) {
-            console.error("API profile creation error:", result.error)
+          if (profileError) {
+            console.error("Profile creation error:", profileError)
             return {
               success: false,
               message: "Account created but profile setup failed. Please contact support.",
-              error: result.error,
+              error: profileError,
             }
           }
 
@@ -135,12 +128,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             success: true,
             message: "Please check your email to verify your account.",
           }
-        } catch (apiError) {
-          console.error("API call error:", apiError)
+        } catch (profileError) {
+          console.error("Profile creation exception:", profileError)
           return {
             success: false,
             message: "Account created but profile setup failed. Please contact support.",
-            error: apiError,
+            error: profileError,
           }
         }
       }
@@ -160,40 +153,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
+      if (error) {
+        return { error }
+      }
+
+      // Fetch user profile details including role
+      if (data.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", data.user.id)
+          .single()
+
+        if (profileError) {
+          // If profile doesn't exist, try to create it using metadata
+          if (profileError.code === "PGRST116") {
+            try {
+              const { error: createProfileError } = await supabase.rpc("create_profile_safely", {
+                user_id: data.user.id,
+                user_name: data.user.user_metadata.name || email.split("@")[0],
+                user_email: email,
+                user_role: "client",
+              })
+
+              if (createProfileError) {
+                return { error: createProfileError }
+              }
+
+              // Fetch the newly created profile
+              const { data: newProfile } = await supabase.from("profiles").select("*").eq("id", data.user.id).single()
+
+              setUserDetails(newProfile)
+
+              // Redirect based on user role
+              if (newProfile?.role === "admin") {
+                router.push("/admin")
+              } else if (newProfile?.role === "worker") {
+                router.push("/worker")
+              } else {
+                router.push("/dashboard")
+              }
+
+              return { data }
+            } catch (createError) {
+              return { error: createError }
+            }
+          }
+          return { error: profileError }
+        }
+
+        setUserDetails(profile)
+
+        // Redirect based on user role
+        if (profile?.role === "admin") {
+          router.push("/admin")
+        } else if (profile?.role === "worker") {
+          router.push("/worker")
+        } else {
+          router.push("/dashboard")
+        }
+      }
+
+      return { data }
+    } catch (error) {
       return { error }
     }
-
-    // Fetch user profile details including role
-    if (data.user) {
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", data.user.id)
-        .single()
-
-      if (profileError) {
-        return { error: profileError }
-      }
-
-      setUserDetails(profile)
-
-      // Redirect based on user role
-      if (profile?.role === "admin") {
-        router.push("/admin")
-      } else if (profile?.role === "worker") {
-        router.push("/worker")
-      } else {
-        router.push("/dashboard")
-      }
-    }
-
-    return { data }
   }
 
   const signOut = async () => {

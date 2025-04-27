@@ -1,706 +1,269 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { supabase } from "@/lib/supabase/client"
-import { useAuth } from "@/context/auth-context"
+import type React from "react"
+
+import { createContext, useContext, useState } from "react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useAuth } from "./auth-context"
+import type { Database } from "@/lib/database.types"
 import { toast } from "@/components/ui/use-toast"
 
-// Define report type
-export interface Report {
-  id: string
-  title: string
-  description: string
-  location: string
-  latitude?: number
-  longitude?: number
-  status: string
-  created_by: {
-    id: string
-    name: string
-    email: string
-  }
-  assigned_to?: {
-    id: string
-    name: string
-    email: string
-  }
-  resolution_details?: string
-  created_at: string
-  updated_at: string
-  submittedAt: string
-  submittedBy: string
-  type: string
-  comment?: string
-}
+type Report = Database["public"]["Tables"]["reports"]["Row"]
+type ReportInsert = Database["public"]["Tables"]["reports"]["Insert"]
+type ReportUpdate = Database["public"]["Tables"]["reports"]["Update"]
 
-// Define reports context type
-interface ReportsContextType {
+type ReportsContextType = {
   reports: Report[]
   isLoading: boolean
-  error: string | null
-  addReport: (reportData: {
-    title: string
-    description: string
-    location: string
-    latitude?: number
-    longitude?: number
-    type: string
-  }) => Promise<Report | null>
-  approveReport: (id: string) => Promise<boolean>
-  rejectReport: (id: string, comment: string) => Promise<boolean>
-  assignReport: (id: string, workerId: string) => Promise<boolean>
-  startWorkOnReport: (id: string) => Promise<boolean>
-  resolveReport: (id: string, resolutionDetails: string, images?: string[]) => Promise<boolean>
-  completeReport: (id: string) => Promise<boolean>
-  getReportById: (id: string) => Report | undefined
-  getUserReports: (userId: string) => Report[]
-  getWorkerReports: (workerId: string) => Report[]
-  fetchReports: () => Promise<void>
+  error: Error | null
+  addReport: (report: Omit<ReportInsert, "created_by">) => Promise<{ id: string } | null>
+  updateReport: (id: string, updates: ReportUpdate) => Promise<Report | null>
+  deleteReport: (id: string) => Promise<boolean>
+  assignReport: (id: string, workerId: string) => Promise<Report | null>
+  updateReportStatus: (id: string, status: string) => Promise<Report | null>
+  fetchReports: (filter?: string) => Promise<Report[]>
+  fetchReport: (id: string) => Promise<Report | null>
 }
 
-// Create the context
 const ReportsContext = createContext<ReportsContextType | undefined>(undefined)
 
-// Reports provider component
-export function ReportsProvider({ children }: { children: ReactNode }) {
+export function ReportsProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
   const [reports, setReports] = useState<Report[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const auth = useAuth()
-  const user = auth?.user
+  const [error, setError] = useState<Error | null>(null)
+  const supabase = createClientComponentClient<Database>()
 
-  // Fetch reports on mount
-  useEffect(() => {
-    if (user) {
-      fetchReports()
-    }
-  }, [user])
-
-  // Fetch all reports
-  const fetchReports = async () => {
-    if (!user) return
-
+  const fetchReports = async (filter?: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      // With RLS, this query will automatically filter based on user role
-      let query = supabase
-        .from("reports")
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
-        .order("created_at", { ascending: false })
+      let query = supabase.from("reports").select("*")
 
-      // We don't need to filter by role anymore as RLS will handle this
-      // But we can still add specific filters if needed
-      if (user.role === "worker") {
-        // Workers see reports assigned to them or available for assignment
-        query = query.or(`assigned_to.eq.${user.id},status.eq.Approved`)
+      if (filter === "my") {
+        query = query.eq("created_by", user?.id)
+      } else if (filter === "assigned") {
+        query = query.eq("assigned_to", user?.id)
+      } else if (filter === "pending") {
+        query = query.eq("status", "Pending")
+      } else if (filter === "approved") {
+        query = query.eq("status", "Approved")
+      } else if (filter === "in-progress") {
+        query = query.eq("status", "In Progress")
+      } else if (filter === "resolved") {
+        query = query.eq("status", "Resolved")
       }
 
-      const { data, error: supabaseError } = await query
+      const { data, error } = await query.order("created_at", { ascending: false })
 
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to fetch reports")
-        return
+      if (error) {
+        throw error
       }
 
-      if (data) {
-        const formattedReports = data.map((report) => ({
-          id: report.id,
-          title: report.title,
-          description: report.description,
-          location: report.location,
-          latitude: report.latitude,
-          longitude: report.longitude,
-          status: report.status,
-          created_by: {
-            id: report.created_by.id,
-            name: report.created_by.name,
-            email: report.created_by.email,
-          },
-          assigned_to: report.assigned_to
-            ? {
-                id: report.assigned_to.id,
-                name: report.assigned_to.name,
-                email: report.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: report.resolution_details,
-          created_at: report.created_at,
-          updated_at: report.updated_at,
-          submittedAt: report.created_at,
-          submittedBy: report.created_by.name,
-          type: report.type,
-          comment: report.comment,
-        }))
-
-        setReports(formattedReports)
-      }
-    } catch (error) {
-      console.error("Error fetching reports:", error)
-      setError("An unexpected error occurred while fetching reports")
+      setReports(data || [])
+      return data || []
+    } catch (err: any) {
+      setError(err)
+      console.error("Error fetching reports:", err)
+      return []
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Add a new report
-  const addReport = async (reportData: {
-    title: string
-    description: string
-    location: string
-    latitude?: number
-    longitude?: number
-    type: string
-  }): Promise<Report | null> => {
-    if (!user) return null
-
+  const fetchReport = async (id: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const newReport = {
-        title: reportData.title,
-        description: reportData.description,
-        location: reportData.location,
-        latitude: reportData.latitude,
-        longitude: reportData.longitude,
-        type: reportData.type,
-        status: "Pending",
-        created_by: user.id,
+      const { data, error } = await supabase.from("reports").select("*").eq("id", id).single()
+
+      if (error) {
+        throw error
       }
 
-      const { data, error: supabaseError } = await supabase
-        .from("reports")
-        .insert([newReport])
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
-        .single()
-
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to create report")
-        return null
-      }
-
-      if (data) {
-        const formattedReport = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          location: data.location,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          status: data.status,
-          created_by: {
-            id: data.created_by.id,
-            name: data.created_by.name,
-            email: data.created_by.email,
-          },
-          assigned_to: data.assigned_to
-            ? {
-                id: data.assigned_to.id,
-                name: data.assigned_to.name,
-                email: data.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: data.resolution_details,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          submittedAt: data.created_at,
-          submittedBy: data.created_by.name,
-          type: data.type,
-          comment: data.comment,
-        }
-
-        setReports((prev) => [formattedReport, ...prev])
-        toast({
-          title: "Report submitted",
-          description: "Your report has been submitted successfully",
-        })
-        return formattedReport
-      }
-
-      return null
-    } catch (error) {
-      console.error("Error creating report:", error)
-      setError("An unexpected error occurred while creating the report")
+      return data
+    } catch (err: any) {
+      setError(err)
+      console.error("Error fetching report:", err)
       return null
     } finally {
       setIsLoading(false)
     }
   }
 
-  // The rest of the functions remain largely the same
-  // They will work with RLS because the policies we set up
-  // allow users to update their own reports, admins to update any report, etc.
-
-  // Approve a report
-  const approveReport = async (id: string): Promise<boolean> => {
-    if (!user) return false
+  const addReport = async (report: Omit<ReportInsert, "created_by">) => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "You must be logged in to submit a report",
+        variant: "destructive",
+      })
+      return null
+    }
 
     setIsLoading(true)
     setError(null)
 
     try {
-      const { data, error: supabaseError } = await supabase
-        .from("reports")
-        .update({ status: "Approved" })
-        .eq("id", id)
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
-        .single()
+      // Use the RPC function we created
+      const { data, error } = await supabase.rpc("create_report_safely", {
+        report_title: report.title,
+        report_description: report.description,
+        report_location: report.location,
+        report_latitude: report.latitude || null,
+        report_longitude: report.longitude || null,
+        report_type: report.type,
+        report_created_by: user.id,
+      })
 
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to approve report")
-        return false
-      }
-
-      if (data) {
-        const formattedReport = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          location: data.location,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          status: data.status,
-          created_by: {
-            id: data.created_by.id,
-            name: data.created_by.name,
-            email: data.created_by.email,
-          },
-          assigned_to: data.assigned_to
-            ? {
-                id: data.assigned_to.id,
-                name: data.assigned_to.name,
-                email: data.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: data.resolution_details,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          submittedAt: data.created_at,
-          submittedBy: data.created_by.name,
-          type: data.type,
-          comment: data.comment,
-        }
-
-        setReports((prev) => prev.map((report) => (report.id === id ? formattedReport : report)))
+      if (error) {
+        console.error("Error creating report:", error)
         toast({
-          title: "Report approved",
-          description: "The report has been approved successfully",
+          title: "Error",
+          description: "Failed to submit report. Please try again.",
+          variant: "destructive",
         })
-        return true
+        throw error
       }
 
-      return false
-    } catch (error) {
-      console.error("Error approving report:", error)
-      setError("An unexpected error occurred while approving the report")
+      // Refresh reports list
+      await fetchReports()
+
+      toast({
+        title: "Success",
+        description: "Report submitted successfully",
+      })
+
+      return { id: data }
+    } catch (err: any) {
+      setError(err)
+      console.error("Error adding report:", err)
+      return null
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const updateReport = async (id: string, updates: ReportUpdate) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const { data, error } = await supabase.from("reports").update(updates).eq("id", id).select().single()
+
+      if (error) {
+        throw error
+      }
+
+      // Update local state
+      setReports((prevReports) => prevReports.map((report) => (report.id === id ? { ...report, ...updates } : report)))
+
+      return data
+    } catch (err: any) {
+      setError(err)
+      console.error("Error updating report:", err)
+      return null
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const deleteReport = async (id: string) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const { error } = await supabase.from("reports").delete().eq("id", id)
+
+      if (error) {
+        throw error
+      }
+
+      // Update local state
+      setReports((prevReports) => prevReports.filter((report) => report.id !== id))
+
+      return true
+    } catch (err: any) {
+      setError(err)
+      console.error("Error deleting report:", err)
       return false
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Reject a report
-  const rejectReport = async (id: string, comment: string): Promise<boolean> => {
-    if (!user) return false
-
+  const assignReport = async (id: string, workerId: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const { data, error: supabaseError } = await supabase
-        .from("reports")
-        .update({
-          status: "Rejected",
-          comment,
-        })
-        .eq("id", id)
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
-        .single()
-
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to reject report")
-        return false
-      }
-
-      if (data) {
-        const formattedReport = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          location: data.location,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          status: data.status,
-          created_by: {
-            id: data.created_by.id,
-            name: data.created_by.name,
-            email: data.created_by.email,
-          },
-          assigned_to: data.assigned_to
-            ? {
-                id: data.assigned_to.id,
-                name: data.assigned_to.name,
-                email: data.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: data.resolution_details,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          submittedAt: data.created_at,
-          submittedBy: data.created_by.name,
-          type: data.type,
-          comment: data.comment,
-        }
-
-        setReports((prev) => prev.map((report) => (report.id === id ? formattedReport : report)))
-        toast({
-          title: "Report rejected",
-          description: "The report has been rejected",
-        })
-        return true
-      }
-
-      return false
-    } catch (error) {
-      console.error("Error rejecting report:", error)
-      setError("An unexpected error occurred while rejecting the report")
-      return false
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Assign a report to a worker
-  const assignReport = async (id: string, workerId: string): Promise<boolean> => {
-    if (!user) return false
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const { data, error: supabaseError } = await supabase
+      const { data, error } = await supabase
         .from("reports")
         .update({
           assigned_to: workerId,
           status: "In Progress",
+          updated_at: new Date().toISOString(),
         })
         .eq("id", id)
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
+        .select()
         .single()
 
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to assign report")
-        return false
+      if (error) {
+        throw error
       }
 
-      if (data) {
-        const formattedReport = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          location: data.location,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          status: data.status,
-          created_by: {
-            id: data.created_by.id,
-            name: data.created_by.name,
-            email: data.created_by.email,
-          },
-          assigned_to: data.assigned_to
-            ? {
-                id: data.assigned_to.id,
-                name: data.assigned_to.name,
-                email: data.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: data.resolution_details,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          submittedAt: data.created_at,
-          submittedBy: data.created_by.name,
-          type: data.type,
-          comment: data.comment,
-        }
+      // Update local state
+      setReports((prevReports) =>
+        prevReports.map((report) =>
+          report.id === id
+            ? { ...report, assigned_to: workerId, status: "In Progress", updated_at: new Date().toISOString() }
+            : report,
+        ),
+      )
 
-        setReports((prev) => prev.map((report) => (report.id === id ? formattedReport : report)))
-        toast({
-          title: "Report assigned",
-          description: "The report has been assigned successfully",
-        })
-        return true
-      }
-
-      return false
-    } catch (error) {
-      console.error("Error assigning report:", error)
-      setError("An unexpected error occurred while assigning the report")
-      return false
+      return data
+    } catch (err: any) {
+      setError(err)
+      console.error("Error assigning report:", err)
+      return null
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Start work on a report
-  const startWorkOnReport = async (id: string): Promise<boolean> => {
-    if (!user) return false
-
+  const updateReportStatus = async (id: string, status: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const { data, error: supabaseError } = await supabase
+      const { data, error } = await supabase
         .from("reports")
-        .update({
-          assigned_to: user.id,
-          status: "In Progress",
-        })
+        .update({ status, updated_at: new Date().toISOString() })
         .eq("id", id)
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
+        .select()
         .single()
 
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to start work on report")
-        return false
+      if (error) {
+        throw error
       }
 
-      if (data) {
-        const formattedReport = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          location: data.location,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          status: data.status,
-          created_by: {
-            id: data.created_by.id,
-            name: data.created_by.name,
-            email: data.created_by.email,
-          },
-          assigned_to: data.assigned_to
-            ? {
-                id: data.assigned_to.id,
-                name: data.assigned_to.name,
-                email: data.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: data.resolution_details,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          submittedAt: data.created_at,
-          submittedBy: data.created_by.name,
-          type: data.type,
-          comment: data.comment,
-        }
+      // Update local state
+      setReports((prevReports) =>
+        prevReports.map((report) =>
+          report.id === id ? { ...report, status, updated_at: new Date().toISOString() } : report,
+        ),
+      )
 
-        setReports((prev) => prev.map((report) => (report.id === id ? formattedReport : report)))
-        toast({
-          title: "Work started",
-          description: "You have started working on this report",
-        })
-        return true
-      }
-
-      return false
-    } catch (error) {
-      console.error("Error starting work on report:", error)
-      setError("An unexpected error occurred while starting work on the report")
-      return false
+      return data
+    } catch (err: any) {
+      setError(err)
+      console.error("Error updating report status:", err)
+      return null
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // Resolve a report
-  const resolveReport = async (id: string, resolutionDetails: string, images?: string[]): Promise<boolean> => {
-    if (!user) return false
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const { data, error: supabaseError } = await supabase
-        .from("reports")
-        .update({
-          status: "Resolved",
-          resolution_details: resolutionDetails,
-          resolution_images: images,
-        })
-        .eq("id", id)
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
-        .single()
-
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to resolve report")
-        return false
-      }
-
-      if (data) {
-        const formattedReport = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          location: data.location,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          status: data.status,
-          created_by: {
-            id: data.created_by.id,
-            name: data.created_by.name,
-            email: data.created_by.email,
-          },
-          assigned_to: data.assigned_to
-            ? {
-                id: data.assigned_to.id,
-                name: data.assigned_to.name,
-                email: data.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: data.resolution_details,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          submittedAt: data.created_at,
-          submittedBy: data.created_by.name,
-          type: data.type,
-          comment: data.comment,
-        }
-
-        setReports((prev) => prev.map((report) => (report.id === id ? formattedReport : report)))
-        toast({
-          title: "Report resolved",
-          description: "You have successfully resolved this report",
-        })
-        return true
-      }
-
-      return false
-    } catch (error) {
-      console.error("Error resolving report:", error)
-      setError("An unexpected error occurred while resolving the report")
-      return false
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Complete a report (admin only)
-  const completeReport = async (id: string): Promise<boolean> => {
-    if (!user) return false
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const { data, error: supabaseError } = await supabase
-        .from("reports")
-        .update({ status: "Completed" })
-        .eq("id", id)
-        .select(`
-          *,
-          created_by:profiles!reports_created_by_fkey(*),
-          assigned_to:profiles!reports_assigned_to_fkey(*)
-        `)
-        .single()
-
-      if (supabaseError) {
-        setError(supabaseError.message || "Failed to complete report")
-        return false
-      }
-
-      if (data) {
-        const formattedReport = {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          location: data.location,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          status: data.status,
-          created_by: {
-            id: data.created_by.id,
-            name: data.created_by.name,
-            email: data.created_by.email,
-          },
-          assigned_to: data.assigned_to
-            ? {
-                id: data.assigned_to.id,
-                name: data.assigned_to.name,
-                email: data.assigned_to.email,
-              }
-            : undefined,
-          resolution_details: data.resolution_details,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          submittedAt: data.created_at,
-          submittedBy: data.created_by.name,
-          type: data.type,
-          comment: data.comment,
-        }
-
-        setReports((prev) => prev.map((report) => (report.id === id ? formattedReport : report)))
-        toast({
-          title: "Report completed",
-          description: "The report has been marked as completed",
-        })
-        return true
-      }
-
-      return false
-    } catch (error) {
-      console.error("Error completing report:", error)
-      setError("An unexpected error occurred while completing the report")
-      return false
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Get a report by ID
-  const getReportById = (id: string) => {
-    return reports.find((report) => report.id === id)
-  }
-
-  // Get reports for a specific user
-  const getUserReports = (userId: string) => {
-    return reports.filter((report) => report.created_by.id === userId)
-  }
-
-  // Get reports for a specific worker
-  const getWorkerReports = (workerId: string) => {
-    return reports.filter(
-      (report) => report.assigned_to?.id === workerId && ["In Progress", "Resolved"].includes(report.status),
-    )
   }
 
   return (
@@ -710,16 +273,12 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
         isLoading,
         error,
         addReport,
-        approveReport,
-        rejectReport,
+        updateReport,
+        deleteReport,
         assignReport,
-        startWorkOnReport,
-        resolveReport,
-        completeReport,
-        getReportById,
-        getUserReports,
-        getWorkerReports,
+        updateReportStatus,
         fetchReports,
+        fetchReport,
       }}
     >
       {children}
@@ -727,7 +286,6 @@ export function ReportsProvider({ children }: { children: ReactNode }) {
   )
 }
 
-// Custom hook to use reports context
 export function useReports() {
   const context = useContext(ReportsContext)
   if (context === undefined) {

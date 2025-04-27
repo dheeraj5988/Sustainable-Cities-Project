@@ -33,11 +33,9 @@ export default function DashboardPage() {
 
       try {
         setIsLoading(true)
-        const { data, error } = await supabase
-          .from("reports")
-          .select("*")
-          .eq("created_by", user.id)
-          .order("created_at", { ascending: false })
+
+        // Use the stored procedure instead of direct query to avoid RLS recursion
+        const { data, error } = await supabase.rpc("get_user_reports", { user_id: user.id })
 
         if (error) {
           console.error("Error fetching reports:", error)
@@ -98,6 +96,13 @@ export default function DashboardPage() {
           </Button>
         )}
       </div>
+
+      {error && (
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+          <strong className="font-bold">Error: </strong>
+          <span className="block sm:inline">{error}</span>
+        </div>
+      )}
 
       <Tabs defaultValue="all" className="space-y-4">
         <TabsList>

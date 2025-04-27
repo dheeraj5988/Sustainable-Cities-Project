@@ -19,8 +19,8 @@ export async function POST(request: Request) {
         })
       }
 
-      // Create profile for existing user - using direct SQL to bypass RLS
-      const { error: profileError } = await supabase.rpc("create_profile", {
+      // Create profile for existing user using our new function
+      const { error: profileError } = await supabase.rpc("create_profile_safely", {
         user_id: id,
         user_name: name,
         user_email: email,
@@ -68,8 +68,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Failed to create user" }, { status: 500 })
     }
 
-    // Create profile using direct SQL to bypass RLS
-    const { error: profileError } = await supabase.rpc("create_profile", {
+    // Create profile using our new function
+    const { error: profileError } = await supabase.rpc("create_profile_safely", {
       user_id: authData.user.id,
       user_name: name,
       user_email: email,

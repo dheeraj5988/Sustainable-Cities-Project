@@ -29,7 +29,7 @@ const ReportMapComponent = dynamic(() => import("@/components/report-map-compone
 })
 
 export default function ReportPage() {
-  const { user } = useAuth()
+  const { user, userDetails } = useAuth()
   const { addReport, isLoading: isSubmitting } = useReports()
   const router = useRouter()
 
@@ -37,6 +37,7 @@ export default function ReportPage() {
     title: "",
     description: "",
     location: "",
+    type: "",
     image: null as File | null,
   })
   const [userLocation, setUserLocation] = useState<{
@@ -48,10 +49,10 @@ export default function ReportPage() {
 
   // Redirect if user is admin
   useEffect(() => {
-    if (user?.role === "admin") {
+    if (userDetails?.role === "admin") {
       router.push("/admin")
     }
-  }, [user, router])
+  }, [userDetails, router])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -71,7 +72,7 @@ export default function ReportPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.title || !formData.description || !formData.location) {
+    if (!formData.title || !formData.description || !formData.location || !formData.type) {
       toast({
         title: "Missing information",
         description: "Please fill in all required fields",
@@ -88,6 +89,8 @@ export default function ReportPage() {
         location: formData.location,
         latitude: userLocation.lat || undefined,
         longitude: userLocation.lng || undefined,
+        type: formData.type,
+        status: "Pending",
       })
 
       if (newReport) {
@@ -99,6 +102,7 @@ export default function ReportPage() {
           title: "",
           description: "",
           location: "",
+          type: "",
           image: null,
         })
       } else {
