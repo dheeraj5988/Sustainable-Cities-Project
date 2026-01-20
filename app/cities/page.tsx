@@ -1,123 +1,140 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { cities, type City } from "@/lib/data"
-import { AQIBadge } from "@/components/ui/aqi-badge"
-import { SustainabilityScore } from "@/components/ui/sustainability-score"
 import { Button } from "@/components/ui/button"
-import { MapPin, Search } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 export default function CitiesPage() {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [sortBy, setSortBy] = useState("name")
+  const [cities, setCities] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const { user, isLoading } = useAuth()
+  const router = useRouter()
+  const supabase = createClientComponentClient()
 
-  const filteredCities = cities.filter(
-    (city) =>
-      city.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      city.state.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        setLoading(true)
+        setError(null)
 
-  const sortedCities = [...filteredCities].sort((a, b) => {
-    switch (sortBy) {
-      case "aqi":
-        return a.aqi - b.aqi
-      case "sustainabilityScore":
-        return b.sustainabilityScore - a.sustainabilityScore
-      case "greenSpace":
-        return b.greenSpace - a.greenSpace
-      case "population":
-        return b.population - a.population
-      default:
-        return a.name.localeCompare(b.name)
+        // Check if user is authenticated
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+
+        if (sessionError) {
+          console.error("Session error:", sessionError)
+          setError("Authentication error. Please sign in again.")
+          router.push("/signin")
+          return
+        }
+
+        if (!sessionData.session) {
+          setError("Please sign in to view cities")
+          router.push("/signin")
+          return
+        }
+
+        // Fetch cities data
+        const { data, error } = await supabase.from("cities").select("*").order("name")
+
+        if (error) {
+          console.error("Error fetching cities:", error)
+          setError("Failed to load cities. Please try again later.")
+        } else {
+          setCities(data || [])
+        }
+      } catch (err) {
+        console.error("Unexpected error:", err)
+        setError("An unexpected error occurred. Please try again.")
+      } finally {
+        setLoading(false)
+      }
     }
-  })
+
+    if (!isLoading) {
+      fetchCities()
+    }
+  }, [supabase, isLoading, router])
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto py-10">
+        <h1 className="text-3xl font-bold mb-6">Cities</h1>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-8 w-3/4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-4 w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto py-10">
+        <Card className="max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle className="text-center text-red-500">Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-center mb-4">{error}</p>
+            <div className="flex justify-center">
+              <Button asChild>
+                <Link href="/signin">Sign In</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">City Dashboard</h1>
-        <p className="text-muted-foreground">Compare sustainability metrics across major Indian cities</p>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search cities or states..."
-            className="pl-8"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+    <div className="container mx-auto py-10">
+      <h1 className="text-3xl font-bold mb-6">Cities</h1>
+      {loading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader>
+                <Skeleton className="h-8 w-3/4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-4 w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="name">Name</SelectItem>
-            <SelectItem value="aqi">AQI (Low to High)</SelectItem>
-            <SelectItem value="sustainabilityScore">Sustainability Score</SelectItem>
-            <SelectItem value="greenSpace">Green Space</SelectItem>
-            <SelectItem value="population">Population</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {sortedCities.map((city) => (
-          <CityCard key={city.id} city={city} />
-        ))}
-      </div>
+      ) : cities.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {cities.map((city) => (
+            <Card key={city.id}>
+              <CardHeader>
+                <CardTitle>{city.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500">{city.description || "No description available"}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <p className="text-center text-gray-500">No cities found.</p>
+      )}
     </div>
-  )
-}
-
-function CityCard({ city }: { city: City }) {
-  return (
-    <Card className="overflow-hidden">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg">{city.name}</CardTitle>
-        <p className="text-sm text-muted-foreground">{city.state}</p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-sm text-muted-foreground">Air Quality Index</span>
-          </div>
-          <AQIBadge aqi={city.aqi} size="md" />
-        </div>
-
-        <div className="flex justify-between items-center">
-          <SustainabilityScore score={city.sustainabilityScore} />
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">Green Space</p>
-            <p className="text-lg font-bold">{city.greenSpace}%</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div>
-            <p className="text-sm text-muted-foreground">Carbon</p>
-            <p className="text-base font-medium">{city.carbonEmissions} tons/capita</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">Population</p>
-            <p className="text-base font-medium">{(city.population / 1000000).toFixed(1)}M</p>
-          </div>
-        </div>
-
-        <Button variant="outline" size="sm" className="w-full mt-2" asChild>
-          <Link href={`/map?city=${city.id}`}>
-            <MapPin className="mr-2 h-4 w-4" />
-            View on Map
-          </Link>
-        </Button>
-      </CardContent>
-    </Card>
   )
 }

@@ -18,7 +18,7 @@ import { useAuth } from "@/context/auth-context"
 
 export function AppSidebar() {
   const pathname = usePathname()
-  const { user } = useAuth()
+  const { user, userDetails } = useAuth()
 
   // Define routes based on user role
   const userRoutes = [
@@ -96,7 +96,7 @@ export function AppSidebar() {
     {
       title: "Worker Dashboard",
       icon: Wrench,
-      href: "/worker",
+      href: "/worker/dashboard",
     },
     {
       title: "Map View",
@@ -111,7 +111,8 @@ export function AppSidebar() {
   ]
 
   // Select routes based on user role
-  const routes = user?.role === "admin" ? adminRoutes : user?.role === "worker" ? workerRoutes : userRoutes
+  const routes =
+    userDetails?.role === "admin" ? adminRoutes : userDetails?.role === "worker" ? workerRoutes : userRoutes
 
   return (
     <Sidebar>
@@ -141,8 +142,12 @@ export function AppSidebar() {
         <Button variant="outline" className="w-full bg-green-100 hover:bg-green-200 border-green-300">
           <Users className="mr-2 h-4 w-4" />
           <span>
-            {user?.name ||
-              (user?.role === "admin" ? "Admin Account" : user?.role === "worker" ? "Worker Account" : "User Account")}
+            {userDetails?.name ||
+              (userDetails?.role === "admin"
+                ? "Admin Account"
+                : userDetails?.role === "worker"
+                  ? "Worker Account"
+                  : "User Account")}
           </span>
         </Button>
       </SidebarFooter>
